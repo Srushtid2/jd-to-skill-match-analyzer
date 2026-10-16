@@ -1,0 +1,222 @@
+{
+  "name": "Resume vs JD Scorer",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Resume vs Job Description Scorer",
+        "formDescription": "Upload a candidate resume and the job description (PDF). You will get a match score.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Resume (PDF)",
+              "fieldType": "file",
+              "fieldName": "resume",
+              "multipleFiles": false,
+              "acceptFileTypes": ".pdf",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Job Description (PDF)",
+              "fieldType": "file",
+              "fieldName": "jd",
+              "multipleFiles": false,
+              "acceptFileTypes": ".pdf",
+              "requiredField": true
+            }
+          ]
+        },
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "fe993a49-dec0-4529-a796-bd9a31260e29",
+      "name": "Upload Resume & JD",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        112
+      ],
+      "webhookId": "aa49da87-39ca-49cc-bca2-e64e81011de3"
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "resume",
+        "options": {
+          "joinPages": true,
+          "keepSource": "both"
+        }
+      },
+      "id": "91499ba6-2986-4239-acec-3ac9f77a88c9",
+      "name": "Extract Resume Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "jd",
+        "options": {
+          "joinPages": true
+        }
+      },
+      "id": "9ab58dab-bb72-45d7-8d2d-b5147c472349",
+      "name": "Extract JD Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are an expert technical recruiter. Compare the candidate RESUME against the JOB DESCRIPTION and rate how well the candidate matches.\n\nReturn your answer as JSON with this exact shape:\n{\n  \"score\": <integer 0-100>,\n  \"verdict\": \"<Strong Match | Good Match | Partial Match | Weak Match>\",\n  \"matched_skills\": [\"...\"],\n  \"missing_skills\": [\"...\"],\n  \"summary\": \"<2-3 sentence justification>\"\n}\n\nRESUME:\n{{ $(\"Extract Resume Text\").item.json.text }}\n\nJOB DESCRIPTION:\n{{ $(\"Extract JD Text\").item.json.text }}",
+        "batching": {}
+      },
+      "id": "e4a44937-256d-4f11-aab0-1279867333ec",
+      "name": "Score Resume vs JD",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        672,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "completion",
+        "completionTitle": "Resume Match Result",
+        "completionMessage": "={{ $json.html }}",
+        "options": {
+          "customCss": "const raw = $json.text || \"\";\n\nconst clean = raw\n  .replace(/```json/gi, \"\")\n  .replace(/```/g, \"\")\n  .trim();\n\nconst data = JSON.parse(clean);\n\nconst skills = (data.matched_skills || [])\n  .map(skill => `\n    <span style=\"\n      display:inline-block;\n      box-sizing:border-box;\n      max-width:100%;\n      background:#eef6ff;\n      color:#1d4ed8;\n      border:1px solid #dbeafe;\n      padding:7px 11px;\n      margin:4px 3px;\n      border-radius:20px;\n      font-size:13px;\n      font-weight:600;\n      line-height:1.35;\n      white-space:normal;\n      overflow-wrap:anywhere;\n      word-break:break-word;\n    \">${skill}</span>\n  `)\n  .join(\"\");\n\nconst gaps = (data.missing_skills || [])\n  .map(skill => `\n    <li style=\"\n      margin:7px 0;\n      line-height:1.5;\n      overflow-wrap:anywhere;\n      word-break:break-word;\n    \">${skill}</li>\n  `)\n  .join(\"\");\n\nconst score = Number(data.score || 0);\n\nlet scoreColor = \"#16a34a\";\nlet scoreBg = \"#dcfce7\";\n\nif (score < 60) {\n  scoreColor = \"#dc2626\";\n  scoreBg = \"#fee2e2\";\n} else if (score < 80) {\n  scoreColor = \"#d97706\";\n  scoreBg = \"#fef3c7\";\n}\n\nconst html = `\n<div style=\"\n  width:100%;\n  max-width:760px;\n  box-sizing:border-box;\n  margin:0 auto;\n  padding:10px 16px 30px;\n  font-family:Arial,Helvetica,sans-serif;\n  color:#1f2937;\n  overflow:hidden;\n\">\n\n  <!-- Score Card -->\n  <div style=\"\n    width:100%;\n    box-sizing:border-box;\n    background:linear-gradient(135deg,#111827,#26364a);\n    color:white;\n    border-radius:18px;\n    padding:28px 20px;\n    text-align:center;\n    margin-bottom:18px;\n  \">\n\n    <div style=\"\n      font-size:14px;\n      font-weight:600;\n      letter-spacing:1px;\n      text-transform:uppercase;\n      opacity:.8;\n    \">\n      Resume Match\n    </div>\n\n    <div style=\"\n      font-size:58px;\n      font-weight:800;\n      line-height:1;\n      margin:14px 0 10px;\n      color:#34d399;\n    \">\n      ${score}%\n    </div>\n\n    <div style=\"\n      display:inline-block;\n      background:${scoreBg};\n      color:${scoreColor};\n      padding:7px 16px;\n      border-radius:30px;\n      font-size:13px;\n      font-weight:700;\n    \">\n      ${data.verdict || \"Match\"}\n    </div>\n\n  </div>\n\n\n  <!-- Matching Skills -->\n  <div style=\"\n    width:100%;\n    box-sizing:border-box;\n    background:#ffffff;\n    border:1px solid #e5e7eb;\n    border-radius:15px;\n    padding:20px;\n    margin-bottom:16px;\n  \">\n\n    <div style=\"\n      font-size:18px;\n      font-weight:700;\n      margin-bottom:14px;\n      color:#111827;\n    \">\n      <span style=\"color:#16a34a;\">✓</span>\n      Matching Skills\n    </div>\n\n    <div style=\"\n      width:100%;\n      box-sizing:border-box;\n      display:flex;\n      flex-wrap:wrap;\n      align-items:flex-start;\n      justify-content:flex-start;\n      gap:2px;\n      overflow:hidden;\n    \">\n      ${skills || \"<span>No matching skills found.</span>\"}\n    </div>\n\n  </div>\n\n\n  <!-- Skill Gaps -->\n  <div style=\"\n    width:100%;\n    box-sizing:border-box;\n    background:#fffaf0;\n    border:1px solid #fde68a;\n    border-radius:15px;\n    padding:20px;\n    margin-bottom:16px;\n  \">\n\n    <div style=\"\n      font-size:18px;\n      font-weight:700;\n      color:#92400e;\n      margin-bottom:12px;\n    \">\n      <span>⚠</span>\n      Skill Gaps\n    </div>\n\n    <ul style=\"\n      margin:0;\n      padding-left:22px;\n      color:#78350f;\n    \">\n      ${gaps || \"<li>No major skill gaps identified.</li>\"}\n    </ul>\n\n  </div>\n\n\n  <!-- Recruiter Summary -->\n  <div style=\"\n    width:100%;\n    box-sizing:border-box;\n    background:#ffffff;\n    border:1px solid #e5e7eb;\n    border-radius:15px;\n    padding:20px;\n  \">\n\n    <div style=\"\n      font-size:18px;\n      font-weight:700;\n      color:#111827;\n      margin-bottom:12px;\n    \">\n      <span>📋</span>\n      Recruiter Summary\n    </div>\n\n    <div style=\"\n      font-size:14px;\n      line-height:1.7;\n      color:#4b5563;\n      overflow-wrap:anywhere;\n      word-break:break-word;\n    \">\n      ${data.summary || \"No summary available.\"}\n    </div>\n\n  </div>\n\n</div>\n`;\n\nreturn [\n  {\n    json: {\n      html\n    }\n  }\n];"
+        }
+      },
+      "id": "29d3345d-7302-4288-92a2-bc4ea5de9b0b",
+      "name": "Show Score",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        1104,
+        176
+      ],
+      "webhookId": "1738a110-d8ba-438b-9603-7fe5d4aa0513"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.5-flash",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        704,
+        304
+      ],
+      "id": "60d7f91c-77c5-4a36-b902-8111721fed17",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "5rydXesb23gWlFJo",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.text || \"\";\n\nconst clean = raw\n  .replace(/```json/gi, \"\")\n  .replace(/```/g, \"\")\n  .trim();\n\nconst data = JSON.parse(clean);\n\nconst skills = (data.matched_skills || [])\n  .map(skill => `\n    <span style=\"\n      display:inline-block;\n      background:#e8f5ee;\n      color:#166534;\n      padding:8px 12px;\n      margin:4px;\n      border-radius:20px;\n      font-size:14px;\n      font-weight:600;\n    \">${skill}</span>\n  `)\n  .join(\"\");\n\nconst gaps = (data.missing_skills || [])\n  .map(skill => `\n    <li style=\"\n      margin:8px 0;\n      color:#374151;\n    \">${skill}</li>\n  `)\n  .join(\"\");\n\nconst score = Number(data.score || 0);\n\nlet scoreBackground = \"#16a34a\";\n\nif (score < 60) {\n  scoreBackground = \"#dc2626\";\n} else if (score < 80) {\n  scoreBackground = \"#f59e0b\";\n}\n\nconst html = `\n<div style=\"\n  font-family:Arial,Helvetica,sans-serif;\n  max-width:850px;\n  margin:20px auto;\n  color:#172033;\n\">\n\n  <!-- HEADER -->\n  <div style=\"\n    background:linear-gradient(135deg,#111827,#243b53);\n    color:white;\n    padding:35px 25px;\n    border-radius:18px;\n    text-align:center;\n    margin-bottom:20px;\n  \">\n\n    <div style=\"\n      font-size:24px;\n      font-weight:700;\n      margin-bottom:18px;\n    \">\n      Resume Match Report\n    </div>\n\n    <div style=\"\n      font-size:64px;\n      font-weight:800;\n      line-height:1;\n      margin:15px 0;\n    \">\n      ${score}%\n    </div>\n\n    <div style=\"\n      display:inline-block;\n      background:${scoreBackground};\n      color:white;\n      padding:8px 18px;\n      border-radius:20px;\n      font-size:14px;\n      font-weight:700;\n    \">\n      ${data.verdict || \"Match\"}\n    </div>\n\n  </div>\n\n\n  <!-- MATCHING SKILLS -->\n  <div style=\"\n    background:white;\n    border:1px solid #e5e7eb;\n    border-radius:16px;\n    padding:24px;\n    margin-bottom:18px;\n  \">\n\n    <h2 style=\"\n      margin:0 0 18px 0;\n      font-size:19px;\n      color:#166534;\n    \">\n      ✅ Matching Skills\n    </h2>\n\n    <div>\n      ${skills || \"<p>No matching skills found.</p>\"}\n    </div>\n\n  </div>\n\n\n  <!-- SKILL GAPS -->\n  <div style=\"\n    background:white;\n    border:1px solid #e5e7eb;\n    border-radius:16px;\n    padding:24px;\n    margin-bottom:18px;\n  \">\n\n    <h2 style=\"\n      margin:0 0 15px 0;\n      font-size:19px;\n      color:#b45309;\n    \">\n      ⚠️ Skill Gaps\n    </h2>\n\n    <ul style=\"\n      padding-left:22px;\n      margin:0;\n    \">\n      ${\n        gaps ||\n        \"<li>No major skill gaps identified.</li>\"\n      }\n    </ul>\n\n  </div>\n\n\n  <!-- SUMMARY -->\n  <div style=\"\n    background:white;\n    border:1px solid #e5e7eb;\n    border-radius:16px;\n    padding:24px;\n    margin-bottom:18px;\n  \">\n\n    <h2 style=\"\n      margin:0 0 15px 0;\n      font-size:19px;\n      color:#172033;\n    \">\n      📋 Recruiter Summary\n    </h2>\n\n    <p style=\"\n      line-height:1.7;\n      color:#4b5563;\n      margin:0;\n    \">\n      ${data.summary || \"No summary available.\"}\n    </p>\n\n  </div>\n\n</div>\n`;\n\nreturn [\n  {\n    json: {\n      html\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        944,
+        256
+      ],
+      "id": "3af8d70c-8240-4a7c-acef-7932cda51e76",
+      "name": "Code in JavaScript"
+    }
+  ],
+  "connections": {
+    "Upload Resume & JD": {
+      "main": [
+        [
+          {
+            "node": "Extract Resume Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Resume Text": {
+      "main": [
+        [
+          {
+            "node": "Extract JD Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract JD Text": {
+      "main": [
+        [
+          {
+            "node": "Score Resume vs JD",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score Resume vs JD": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Score Resume vs JD",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Show Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}
